@@ -47,3 +47,9 @@ uvicorn
 watchfiles
 pytesseract
 instaloader
+fake-useragent
+langchain-groq
+langchain-huggingface
+langchain-community
+python-dotenv
+reportlab
