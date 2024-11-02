@@ -46,3 +46,4 @@ tqdm
 uvicorn
 watchfiles
 pytesseract
+instaloader
