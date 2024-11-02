@@ -45,3 +45,4 @@ transformers
 tqdm
 uvicorn
 watchfiles
+pytesseract
