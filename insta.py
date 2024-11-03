@@ -6,7 +6,6 @@ import io
 import asyncio
 import concurrent.futures
 from instaloader import Instaloader, Post
-from fake_useragent import UserAgent
 from langchain_groq import ChatGroq
 from langchain.schema.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -18,6 +17,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from dotenv import load_dotenv
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from fake_useragent import UserAgent
 import os
 
 # Load environment variables
@@ -31,39 +31,30 @@ def initialize_embeddings():
 @st.cache_resource
 def initialize_llm():
     return ChatGroq(model_name="llama-3.2-90b-text-preview")
-st.title("Instagram Post Analyser & Insights")
 
 embeddings = initialize_embeddings()
 llm = initialize_llm()
-topics_of_interest = st.text_area("Enter Topics of Interest (comma-separated)")
-response_length = st.selectbox("Select Response Length", ["Short", "Medium", "Detailed"])
 
 # Set up prompt template for insights
-prompt_template = """
+prompt = ChatPromptTemplate.from_template(
+    """
     Context: {context}
-    Focus on the following topics if present else answer based on context:  {topics}
-    
-    Provide a {length} response with detailed notes. Summarize everything in the end.
-    Rules:
-    1. Be concise and clear in your response.
-"""
+    Analyze the provided Instagram post link and provide detailed insights.
+    Describe the images and any identifiable patterns or topics.
+    If the image is mostly text, focus on the text content.
+    Question: {input}
+    """
+)
 
-# Initialize Instaloader
-L = Instaloader()
-
-# Initialize the UserAgent object
+# Initialize Instaloader and configure User-Agent
 ua = UserAgent()
+L = Instaloader()
+L.context._session.headers.update({'User-Agent': ua.random})  # Use the private _session attribute for headers
 
 @st.cache_data
 def fetch_instagram_content(shortcode):
-    """Fetch all image URLs and caption from an Instagram post with a randomized User-Agent."""
-    headers = {'User-Agent': ua.random}
-    session = requests.Session()
-    session.headers.update(headers)
-
-    post = Post.from_shortcode(L.context, shortcode)  # No headers directly here
-
-    # Using requests for downloading image URLs instead of Instaloader
+    """Fetch all image URLs and caption from an Instagram post."""
+    post = Post.from_shortcode(L.context, shortcode)
     image_urls = [node.display_url for node in post.get_sidecar_nodes()]
     caption = post.caption
     return image_urls, caption
@@ -75,7 +66,6 @@ async def fetch_image(url):
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(None, requests.get, url, headers)
     return Image.open(io.BytesIO(response.content))
-
 
 def extract_text_from_images(image_urls):
     """Extract text from a list of image URLs using parallel processing."""
@@ -133,8 +123,10 @@ def generate_pdf(caption, image_texts, insights):
     return pdf_buffer
 
 # Streamlit app interface
+st.title("Instagram Post to PDF Converter & Insights")
 
 instagram_link = st.text_input("Enter Instagram Post Link")
+
 if st.button("Process Instagram Post"):
     try:
         # Extract shortcode from the Instagram link
@@ -149,17 +141,6 @@ if st.button("Process Instagram Post"):
         # Create vector store and retrieval chain
         vector_store = create_vector_embedding(caption, image_texts)
         retriever = vector_store.as_retriever()
-        
-        # Fill in user input into the prompt template
-        prompt = ChatPromptTemplate.from_template(
-            prompt_template.format(
-                context="{context}",
-                topics=topics_of_interest,
-                length=response_length.lower()
-            )
-        )
-        
-        # Create chains with the prompt containing the user preferences
         document_chain = create_stuff_documents_chain(llm, prompt)
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 

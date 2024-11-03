@@ -53,3 +53,4 @@ langchain-huggingface
 langchain-community
 python-dotenv
 reportlab
+aiohttp
